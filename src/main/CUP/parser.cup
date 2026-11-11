@@ -1,0 +1,143 @@
+package com.ejemplo;
+
+import java_cup.runtime.*;
+
+/* -------------------------------------------------------------
+   TERMINALES (Tokens que entrega el Lexer a CUP)
+   ------------------------------------------------------------- */
+terminal INT, BOOL, VOID, MAIN, WHILE, RETURN;
+terminal Boolean TRUE, FALSE;
+terminal SUMA, MULTIPLICACION, ASIGNACION;
+terminal PUNTO_Y_COMA, PARENTESIS_IZQ, PARENTESIS_DER, LLAVE_IZQ, LLAVE_DER;
+terminal Integer NUMERO;
+terminal String IDENTIFICADOR;
+
+/* -------------------------------------------------------------
+   NO TERMINALES (Símbolos de la gramática que construyen nodos AST)
+   ------------------------------------------------------------- */
+non terminal AST P, DeclList, Decl, SentList, Sent, E;
+non terminal String TipoRetorno, TipoDato;
+
+/* -------------------------------------------------------------
+   PRECEDENCIA Y ASOCIATIVIDAD DE OPERADORES
+   La multiplicación tiene mayor precedencia que la suma.
+   ------------------------------------------------------------- */
+precedence left SUMA;
+precedence left MULTIPLICACION;
+
+/* -------------------------------------------------------------
+   SÍMBOLO INICIAL DE LA GRAMÁTICA
+   ------------------------------------------------------------- */
+start with P;
+
+/* -------------------------------------------------------------
+   REGLAS GRAMATICALES Y CONSTRUCCIÓN DEL AST (Puntos 4 y 5)
+   ------------------------------------------------------------- */
+
+// Programa completo: función única main con declaraciones seguidas de sentencias
+P ::= TipoRetorno:tr MAIN PARENTESIS_IZQ PARENTESIS_DER LLAVE_IZQ DeclList:dl SentList:sl LLAVE_DER
+      {:
+          AST prog = new AST(TipoNodo.PROGRAMA, tr, "main");
+          prog.agregarHijo(dl); // Primer hijo: lista de declaraciones
+          prog.agregarHijo(sl); // Segundo hijo: lista de sentencias
+          RESULT = prog;
+      :}
+    ;
+
+// Tipos de retorno posibles para la función main
+TipoRetorno ::= INT  {: RESULT = "int"; :}
+              | BOOL {: RESULT = "bool"; :}
+              | VOID {: RESULT = "void"; :}
+              ;
+
+// Lista de una o más declaraciones de variables
+DeclList ::= DeclList:lista Decl:d
+             {:
+                 lista.agregarHijo(d);
+                 RESULT = lista;
+             :}
+           | Decl:d
+             {:
+                 AST lista = new AST(TipoNodo.LISTA_DECLARACIONES);
+                 lista.agregarHijo(d);
+                 RESULT = lista;
+             :}
+           ;
+
+// Declaración individual: tipo nombre ; (ej: int x;)
+Decl ::= TipoDato:t IDENTIFICADOR:id PUNTO_Y_COMA
+         {: RESULT = new AST(TipoNodo.DECLARACION, t, id); :}
+       ;
+
+// Tipos de datos permitidos para variables
+TipoDato ::= INT  {: RESULT = "int"; :}
+           | BOOL {: RESULT = "bool"; :}
+           ;
+
+// Lista de una o más sentencias dentro de main o de un bloque while
+SentList ::= SentList:lista Sent:s
+             {:
+                 lista.agregarHijo(s);
+                 RESULT = lista;
+             :}
+           | Sent:s
+             {:
+                 AST lista = new AST(TipoNodo.LISTA_SENTENCIAS);
+                 lista.agregarHijo(s);
+                 RESULT = lista;
+             :}
+           ;
+
+// Tipos de sentencias permitidas: Asignación, Ciclo While y Return
+Sent ::= IDENTIFICADOR:id ASIGNACION E:e PUNTO_Y_COMA
+         {:
+             // Nodo ASIGNACION con el nombre de la variable y la expresión como hijo
+             AST asig = new AST(TipoNodo.ASIGNACION, id);
+             asig.agregarHijo(e);
+             RESULT = asig;
+         :}
+       | WHILE PARENTESIS_IZQ E:cond PARENTESIS_DER LLAVE_IZQ SentList:cuerpo LLAVE_DER
+         {:
+             // Nodo WHILE: hijo izquierdo = condición, hijo derecho = lista de sentencias del cuerpo
+             RESULT = new AST(TipoNodo.WHILE, cond, cuerpo);
+         :}
+       | WHILE PARENTESIS_IZQ E:cond PARENTESIS_DER Sent:s
+         {:
+             // Soporte para while de una sola sentencia sin llaves
+             AST cuerpo = new AST(TipoNodo.LISTA_SENTENCIAS);
+             cuerpo.agregarHijo(s);
+             RESULT = new AST(TipoNodo.WHILE, cond, cuerpo);
+         :}
+       | RETURN E:e PUNTO_Y_COMA
+         {:
+             // Return con expresión de retorno
+             AST ret = new AST(TipoNodo.RETURN);
+             ret.agregarHijo(e);
+             RESULT = ret;
+         :}
+       | RETURN PUNTO_Y_COMA
+         {:
+             // Return vacío (para void main)
+             RESULT = new AST(TipoNodo.RETURN);
+         :}
+       ;
+
+// Expresiones aritméticas, agrupación con paréntesis, variables y constantes
+E ::= E:e1 SUMA E:e2
+      {: RESULT = new AST(TipoNodo.SUMA, e1, e2); :}
+    | E:e1 MULTIPLICACION E:e2
+      {: RESULT = new AST(TipoNodo.MULTIPLICACION, e1, e2); :}
+    | PARENTESIS_IZQ E:e PARENTESIS_DER
+      {:
+          // Los paréntesis solo agrupan; retornamos directamente el nodo de la subexpresión
+          RESULT = e;
+      :}
+    | IDENTIFICADOR:id
+      {: RESULT = new AST(TipoNodo.IDENTIFICADOR, id); :}
+    | NUMERO:n
+      {: RESULT = new AST(TipoNodo.NUMERO, n); :}
+    | TRUE:t
+      {: RESULT = new AST(TipoNodo.BOOLEANO, t); :}
+    | FALSE:f
+      {: RESULT = new AST(TipoNodo.BOOLEANO, f); :}
+    ;

@@ -1,0 +1,13 @@
+int main(){
+    int x;
+    int y;
+    bool activo;
+    x = 1;
+    y = 2;
+    activo = true;
+    while (activo) {
+        x = x + 3 * 2 * y;
+        activo = false;
+    }
+    return x;
+}
